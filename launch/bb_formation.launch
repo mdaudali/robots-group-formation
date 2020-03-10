@@ -1,0 +1,3 @@
+<launch>
+	<node pkg="exercises" type="bb_formation.py" name="bb_formation" args="" output="screen"></node>
+</launch>
