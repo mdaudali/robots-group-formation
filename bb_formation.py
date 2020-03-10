@@ -17,6 +17,7 @@ import numpy as np
 # region CONSTANTS
 ROBOT_RADIUS = 0.105 / 2.
 MAX_SPEED = 0.2
+MAX_TURN = MAX_SPEED / ROBOT_RADIUS / 4.
 # endregion CONSTANTS
 
 
@@ -67,8 +68,8 @@ class Robot(object):
         #u = max(u, .05)
         w_abs = abs(w)
         u = max(u, 0.)
-        if abs(w) > self._max_speed / ROBOT_RADIUS:
-            w = w / abs(w) * self._max_speed / ROBOT_RADIUS
+        if abs(w) > MAX_TURN:
+            w = w / abs(w) * MAX_TURN
         return u, w
 
     @property
