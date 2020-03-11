@@ -387,7 +387,7 @@ class BBFormationControl(object):
             if not robot.ready:
                 return
 
-        goal = np.array([10., -1.])
+        goal = np.array([15., 0])
 
         if self.in_dead_zone(goal, self._reference.position):
             for robot in self._robots:
@@ -416,7 +416,8 @@ def run():
 
     reference = RobotAverageReferencePoint(robots)
     offsets = [np.array([-.2, -.6]), np.array([.2, .0]), np.array([-.2, .6])]
-    obstacles = [ObstacleCylinder(np.array([6., 0.]), 1., .8)]
+    obstacles = [ObstacleCylinder(np.array([6., 0.]), 1., .8), ObstacleCylinder(np.array([6., 3.]), 1., .8), ObstacleCylinder(np.array([6., -3.]), 1., .8),
+                 ObstacleCylinder(np.array([9., -1.5]), 1., .8),ObstacleCylinder(np.array([9., 1.5]), 1., .8)]
 
     bb = BBFormationControl(reference, robots, offsets, obstacles)
 

@@ -360,7 +360,7 @@ def run():
         np.array([2., 0.], dtype=np.float32),
     ]
     print(relative_formation)
-    obstacles = [(np.array([6., 0.]), 2.)]
+    obstacles = [(np.array([6., 0.]), 1.), (np.array([6., -3.]), 1.), (np.array([6., 3.]), 1.)]
     rate_limiter = rospy.Rate(20)
 
     while not rospy.is_shutdown():

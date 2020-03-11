@@ -1,0 +1,128 @@
+<?xml version='1.0'?>
+<sdf version='1.6'>
+  <model name='simple'>
+    <link name='fixed'></link>
+    <pose frame=''>0 0 0 0 -0 0</pose>
+    <link name='Cylinder_2'>
+      <collision name='Cylinder_2_Collision'>
+        <geometry>
+          <cylinder>
+            <radius>1.0</radius>
+            <length>0.5</length>
+          </cylinder>
+        </geometry>
+        <pose frame=''>0 0 0.25 0 -0 0</pose>
+      </collision>
+      <visual name='Cylinder_2_Visual'>
+        <pose frame=''>0 0 0.25 0 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>1.0</radius>
+            <length>0.5</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+        </material>
+      </visual>
+      <pose frame=''>6.0 0.0 0 0 0 0</pose>
+    </link>
+     <link name='Cylinder_3'>
+      <collision name='Cylinder_3_Collision'>
+        <geometry>
+          <cylinder>
+            <radius>1.0</radius>
+            <length>0.5</length>
+          </cylinder>
+        </geometry>
+        <pose frame=''>0 0 0.25 0 -0 0</pose>
+      </collision>
+      <visual name='Cylinder_3_Visual'>
+        <pose frame=''>0 0 0.25 0 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>1.0</radius>
+            <length>0.5</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+        </material>
+      </visual>
+      <pose frame=''>6.0 -3.0 0 0 0 0</pose>
+    </link>
+    <link name='Cylinder_4'>
+      <collision name='Cylinder_4_Collision'>
+        <geometry>
+          <cylinder>
+            <radius>1.0</radius>
+            <length>0.5</length>
+          </cylinder>
+        </geometry>
+        <pose frame=''>0 0 0.25 0 -0 0</pose>
+      </collision>
+      <visual name='Cylinder_4_Visual'>
+        <pose frame=''>0 0 0.25 0 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>1.0</radius>
+            <length>0.5</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+        </material>
+      </visual>
+      <pose frame=''>6.0 3.0 0 0 0 0</pose>
+       </link>
+      <link name='Cylinder_5'>
+      <collision name='Cylinder_5_Collision'>
+        <geometry>
+          <cylinder>
+            <radius>1.0</radius>
+            <length>0.5</length>
+          </cylinder>
+        </geometry>
+        <pose frame=''>0 0 0.25 0 -0 0</pose>
+      </collision>
+      <visual name='Cylinder_5_Visual'>
+        <pose frame=''>0 0 0.25 0 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>1.0</radius>
+            <length>0.5</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+        </material>
+      </visual>
+      <pose frame=''>9.0 1.5 0 0 0 0</pose>
+    </link>
+    <link name='Cylinder_6'>
+      <collision name='Cylinder_4_Collision'>
+        <geometry>
+          <cylinder>
+            <radius>1.0</radius>
+            <length>0.5</length>
+          </cylinder>
+        </geometry>
+        <pose frame=''>0 0 0.25 0 -0 0</pose>
+      </collision>
+      <visual name='Cylinder_6_Visual'>
+        <pose frame=''>0 0 0.25 0 -0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>1.0</radius>
+            <length>0.5</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+        </material>
+      </visual>
+      <pose frame=''>9.0 -1.5 0 0 0 0</pose>
+      </link>
+    <static>1</static>
+  </model>
+</sdf>
