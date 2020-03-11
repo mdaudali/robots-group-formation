@@ -1,34 +1,14 @@
 #!/usr/bin/env python
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import random
+import time
+from functools import partial
+import matplotlib.pyplot as plt
 import argparse
 import numpy as np
-import os
-import rospy
-import sys
-
-# Robot motion commands:
-# http://docs.ros.org/api/geometry_msgs/html/msg/Twist.html
-import yaml
-from enum import Enum
-from geometry_msgs.msg import Twist
-
-# Occupancy grid.
-from nav_msgs.msg import OccupancyGrid
-
-# Position.
-from tf import TransformListener
-
-# Goal.
-from geometry_msgs.msg import PoseStamped
-
-# Path.
-from nav_msgs.msg import Path
-
-
 import rospy
 from enum import Enum
 from geometry_msgs.msg import Twist
@@ -37,22 +17,7 @@ from gazebo_msgs.msg import ModelStates
 from tf.transformations import euler_from_quaternion
 import numpy as np
 
-# For pose information.
-from tf.transformations import euler_from_quaternion
 
-# Import the potential_field.py code rather than copy-pasting.
-import rrt
-
-directory = os.path.join(os.path.dirname(os.path.realpath(__file__)))
-sys.path.insert(0, directory)
-try:
-    import rrt_navigation
-except ImportError:
-    raise ImportError(
-        'Unable to import potential_field.py. Make sure this file is in "{}"'.format(
-            directory
-        )
-    )
 # region Utility functions
 
 
@@ -159,7 +124,7 @@ class Robot(object):
 # endregion
 
 # region Constants
-MAX_SPEED = 0.5
+MAX_SPEED = 0.2
 ROBOT_RADIUS = 0.1
 NUM_OF_ROBOTS = 3
 EPSILON = 0.2
@@ -172,39 +137,213 @@ FORMATION = Shape.DIAMOND
 # endregion
 
 
-def check_ghosts(formation, occupancy_grid):
-    return all(occupancy_grid.is_free(x) for x in formation)
+def obstacle_field(position, obstacle_positions, obstacle_radii):
+    """
+
+    :type obstacle_positions: List[Position]
+    :type obstacle_radii: List[float]
+    :type position: Position
+    """
+    v = np.zeros(2, dtype=np.float32)
+
+    # Let d : Q x Q_obstacle -> R_>=0
+    # be a distance function taking the configuration of the robot and the obstacle
+    # where d(robot, obstacle) = 0 when the robot is touching the obstacle and positive otherwise
+    # The Potential is then k/(2d^2(q, obstacle) + \eps) where K is a control gain and
+    # eps is a small factor to prevent division by 0
+    # Thus, the velocity is k / (d^3(q, obstacle) + \eps) * \delta d / \delta q
+    # d is a naive distance measurement function, utilising euclidean distance
+    # it assumes the robot is a single point defined by its control point
+    # The direction of the force is given by \delta d / \delta q
+    # As q is a vector, this is a vector with respect to a change in all parameters.
+    # d is invariant to theta, so \delta d / \delta theta = 0 - There is no theta, ignore
+    # We then bound the maximum force applied
+    # We also bound the range of the bound using d_bound.
+
+    d = (
+        lambda vector_pos, obs_pos, obs_radii: np.linalg.norm(vector_pos - obs_pos)
+                                               - obs_radii
+    )
+    k = 1.1
+    d_bound = (
+        2
+    )
+
+    def partial_diff(vector_pos, obs_pos, obs_radii):
+        v_pos_x = np.add(vector_pos, np.array([0.05, 0]))
+        v_pos_y = np.add(vector_pos, np.array([0, 0.05]))
+        return normalize(
+            np.array(
+                [
+                    d(v_pos_x, obs_pos, obs_radii) - d(vector_pos, obs_pos, obs_radii),
+                    d(v_pos_y, obs_pos, obs_radii) - d(vector_pos, obs_pos, obs_radii),
+                ]
+            )
+        )
+
+    for obs_pos, obs_radii in zip(obstacle_positions, obstacle_radii):
+        distance = d(position, obs_pos, obs_radii)
+        if distance > d_bound:
+            magnitude = 0
+        elif distance <= 0.1:
+            magnitude = 15
+        else:
+            magnitude = (2 - distance) / (2 - 0.1)
+
+        v += normalize(position - obs_pos) * magnitude
+
+    return v
 
 
-def split(leader, sets):
-    for i in sets:
-        if leader in i:
-            length = len(i)
-            middle_index = length // 2
+def goal_potential_field(position, goal):
+    """
 
-            first_half = i[:middle_index]
-            second_half = i[middle_index:]
+    :type goal: Position
+    :type position: Position
+    """
 
-            if len(first_half):
-                sets.append(first_half)
-            if len(second_half):
-                sets.append(second_half)
-    return sets
+    # ! Force field is described by some positive definite operator acting on q_goal - q
+    v = np.zeros(2, dtype=np.float32)
+    positive_definite_operator = partial(cap, max_speed=MAX_SPEED)
+    v = goal - position
+    control_gain = 0.7
+    return v * control_gain
+
+
+def attractive_potential_field(position, goal_pos, C, D):
+    direction = normalize(goal_pos - position)
+    r = np.linalg.norm(goal_pos - position)
+    if r > C:
+        magnitude = 1
+    elif D < r <= C:
+        magnitude = (r - D) / (C - D)
+    else:
+        magnitude = 0
+
+    return direction * magnitude
+
+
+def maintain_formation(position, robots, k):
+    other_robots = [robot.pose for ind, robot in enumerate(robots) if ind != k]
+    v = np.zeros(2, dtype=np.float32)
+    attachment_points = []
+    for pose in other_robots:
+        attachment_point = np.array([pose[X] + FORMATION.value[0] * np.cos(pose[YAW]), pose[Y] + FORMATION.value[0] * np.sin(pose[YAW])])
+        attachment_point = rotate(attachment_point, FORMATION.value[2])
+        attachment_points.append(attachment_point)
+        for iterations in range(1, FORMATION.value[1]):
+            attachment_point = rotate(attachment_point, 2 * np.pi / FORMATION.value[1])
+            attachment_points.append(attachment_point)
+
+    min_point = np.array([np.inf, np.inf])
+    for point in attachment_points:
+        if np.linalg.norm(min_point - position) > np.linalg.norm(point - position):
+            min_point = point
+    return attractive_potential_field(position, min_point, 1.0, 0.0) * 1.3
+
+
+def avoid_robots(position, robots, k):
+    other_robots = [robot.pose[:2] for ind, robot in enumerate(robots) if ind != k]
+    v = obstacle_field(position, other_robots, [0.1 for _ in range(len(robots) - 1)])
+    control_gain = 1
+    return v * control_gain
+
+
+last_check = 0
+last_value = 0
+
+def random_velocity_field(position, shift=0.5, scaling_parameter=5):
+    global last_check
+    global last_value
+    if time.time() > last_check + 2:
+        last_check = time.time()
+        last_value = np.random.uniform(0, 2 * np.pi)
+
+    v = np.array([np.cos(last_value), np.sin(last_value)])
+    control_gain = 0.1
+    return v * control_gain
+
+
+def move_to_unit_centre(position, robots, k):
+    centre = np.mean(np.array([robot.pose[:2] for ind, robot in enumerate(robots) if ind != k]), axis=0)
+    return attractive_potential_field(position, centre, 3, 2) * 0.6
+
+
+def get_velocity(position, goal_position, obstacles, robots, k):
+    v_goal = goal_potential_field(position, goal_position)
+    v_obstacle = obstacle_field(position, *zip(*obstacles))
+    v_robots = avoid_robots(position, robots, k)
+    v_formation = maintain_formation(position, robots, k)
+    v_unit = move_to_unit_centre(position, robots, k)
+    v_random = random_velocity_field(position)
+    v = v_obstacle + v_robots + v_goal + v_formation + v_unit + v_random
+    return cap(v, max_speed=MAX_SPEED)
+
+
+def feedback_linearized(pose, velocity, epsilon):
+    u = 0.0  # [m/s]
+    w = 0.0  # [rad/s] going counter-clockwise.
+    # u = xdotp cos(theta) + ydotp sin(theta)
+    # w = 1/eps (-xdotp sin(theta) + ydotp cos(theta))
+    # velocity = xdot ydot
+
+    u = velocity[X] * np.cos(pose[YAW]) + velocity[Y] * np.sin(pose[YAW])
+    w = (
+            1
+            / epsilon
+            * (-velocity[X] * np.sin(pose[YAW]) + velocity[Y] * np.cos(pose[YAW]))
+    )
+    return u, w
+
+
+def plot(robot, field):
+    fig, ax = plt.subplots()
+    # Plot field.
+    X, Y = np.meshgrid(
+        np.linspace(-20, 20, 30),
+        np.linspace(-20, 20, 30),
+    )
+    U = np.zeros_like(X)
+    V = np.zeros_like(X)
+
+    for i in range(len(X)):
+        for j in range(len(X[0])):
+            velocity = field(np.array([X[i, j], Y[i, j]]))
+            U[i, j] = velocity[0]
+            V[i, j] = velocity[1]
+    plt.quiver(X, Y, U, V, units="width")
+
+    # Plot environment.
+    ax.add_artist(plt.Circle([6., 0.], 1, color="gray"))
+    ax.add_artist(plt.Circle(robot.pose[:2], .5, color="red"))
+    # Plot a simple trajectory from the start position.
+    # Uses Euler integration.
+    # dt = 0.01
+    # x = START_POSITION
+    # positions = [x]
+    # for t in np.arange(0.0, 40.0, dt):
+    #     v = get_velocity(x, args.mode)
+    #     x = x + v * dt
+    #     positions.append(x)
+    # positions = np.array(positions)
+    # plt.plot(positions[:, 0], positions[:, 1], lw=2, c="r")
+
+    plt.axis("equal")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.xlim([-0.5 - 20, 20 + 0.5])
+    plt.ylim([-0.5 - 20, 20 + 0.5])
+    plt.show()
+    # plt.close()
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+    # ax.plot_surface(X, Y, np.linalg.norm(np.concatenate((U, V)), axis=0), color='b')
+    # plt.show()
+
 
 def run():
     rospy.init_node('move_robots')
-    with open('map.yaml') as fp:
-        data = yaml.load(fp)
-    img = rrt.read_pgm(data['image'])
-    occupancy_grid = np.empty_like(img, dtype=np.int8)
-    occupancy_grid[:] = rrt.UNKNOWN
-    occupancy_grid[img < .1] = rrt.OCCUPIED
-    occupancy_grid[img > .9] = rrt.FREE
-    # Transpose (undo ROS processing).
-    occupancy_grid = occupancy_grid.T
-    # Invert Y-axis.
-    occupancy_grid = occupancy_grid[:, ::-1]
-    occupancy_grid = OccupancyGrid(occupancy_grid, data['origin'], data['resolution'])
+
     # setup list of turtle bots
     robots = []
     for i in range(NUM_OF_ROBOTS):
@@ -212,40 +351,40 @@ def run():
 
     goal = np.array([10., -1.])
 
-    leaders = [[0, 1, 2]]
-
+    relative_formation = [
+        # np.array([1, 0],  dtype=np.float32),
+        # np.array([-1, 0],  dtype=np.float32),
+        # np.array([0, 1], dtype=np.float32),
+        np.array([0., 0.], dtype=np.float32),
+        np.array([-2., 0.], dtype=np.float32),
+        np.array([2., 0.], dtype=np.float32),
+    ]
+    print(relative_formation)
+    obstacles = [(np.array([6., 0.]), 2.)]
     rate_limiter = rospy.Rate(20)
-    formations = [(0, 0), (0, 1), (0, 2)]
+
     while not rospy.is_shutdown():
         if any(r.pose is None for r in robots):
             rate_limiter.sleep()
             continue
-        for i in leaders:
-            leader = i[0]
-            start_node, final_node = rrt.rrt(robots[leader].pose, goal + formations[leader], None)
-            current_path = rrt_navigation.get_path(final_node)
-            if not check_ghosts(current_path[1] + formations[i], occupancy_grid):
-                split(leader, leaders)
-                break
-            else:
-                for x in i:
-                    robot = robots[x]
-                    position = np.array(
-                        [
-                            robot.pose[X] + EPSILON * np.cos(robot.pose[YAW]),
-                            robot.pose[Y] + EPSILON * np.sin(robot.pose[YAW]),
-                        ],
-                        dtype=np.float32,
-                    )
-                    start_node, final_node = rrt.rrt(robot.pose, current_path[1] + formations[x], occupancy_grid)
-                    robot.current_path = rrt_navigation.get_path(final_node)
-                    v = rrt_navigation.get_velocity(position, np.array(robot.current_path, dtype=np.float32))
-                    u, w = rrt_navigation.feedback_linearized(robot.pose, v, epsilon=EPSILON)
-                    robot.velocity = np.array([u, w])
+
+        # expected_formations = create_expected_formations(relative_formation, robots)
+        for k, robot in enumerate(robots):
+            absolute_point_position = np.array(
+                [
+                    robot.pose[X] + EPSILON * np.cos(robot.pose[YAW]),
+                    robot.pose[Y] + EPSILON * np.sin(robot.pose[YAW]),
+                ],
+                dtype=np.float32,
+            )
+            velocity = get_velocity(absolute_point_position, goal, obstacles, robots, k)
+            # plot(robot, lambda x: get_velocity(x, goal, obstacles, robots, k))
+            u, w = feedback_linearized(robot.pose, velocity, epsilon=EPSILON)
+            robot.velocity = np.array([u, w])
 
         rate_limiter.sleep()
 
-        
+
 if __name__ == "__main__":
     try:
         run()
