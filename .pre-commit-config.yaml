@@ -1,0 +1,20 @@
+repos:
+-   repo: https://github.com/ambv/black
+    rev: stable
+    hooks:
+    - id: black
+      language_version: python3.6
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v1.2.3
+    hooks:
+    - id: flake8
+      args: ["--max-line-length=120"]
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: master
+    hooks:
+    - id: mypy
+-   repo: https://github.com/yunojuno/pre-commit-xenon
+    rev: cc59b0431a5d072786b59430e9b342b2881064f6
+    hooks:
+    - id: xenon
+      args: ["--max-average=A", "--max-modules=C", "--max-absolute=C"]

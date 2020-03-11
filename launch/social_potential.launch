@@ -1,0 +1,3 @@
+<launch>
+	<node pkg="exercises" type="social_potential.py" name="social_potential" args="" output="screen"></node>
+</launch>
