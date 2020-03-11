@@ -185,8 +185,8 @@ def obstacle_field(position, obstacle_positions, obstacle_radii):
         distance = d(position, obs_pos, obs_radii)
         if distance > d_bound:
             magnitude = 0
-        elif distance <= 0.1:
-            magnitude = 15
+        elif distance <= 0.2:
+            magnitude = 25
         else:
             magnitude = (2 - distance) / (2 - 0.1)
 
@@ -360,7 +360,7 @@ def run():
         np.array([2., 0.], dtype=np.float32),
     ]
     print(relative_formation)
-    obstacles = [(np.array([6., 0.]), 1.), (np.array([6., -3.]), 1.), (np.array([6., 3.]), 1.)]
+    obstacles = [(np.array([6., 0.]), 1.), (np.array([6., -3.]), 1.), (np.array([6., 3.]), 1.), (np.array([9., -1.5]), 1.), (np.array([9., 1.5]), 1.) ]
     rate_limiter = rospy.Rate(20)
 
     while not rospy.is_shutdown():
